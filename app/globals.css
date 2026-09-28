@@ -1,26 +1,91 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --background: #f6f7f9;
+  --surface: #ffffff;
+  --foreground: #16181d;
+  --muted: #5f6573;
+  --border: #e2e5ea;
+  --accent: #3b5bdb;
+  --accent-soft: #e3e9ff;
+  --bar: #c5cde0;
+  --danger: #c92a2a;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #0f1115;
+    --surface: #181b21;
+    --foreground: #e8eaee;
+    --muted: #9aa1ae;
+    --border: #2a2f38;
+    --accent: #7c95ff;
+    --accent-soft: #232b48;
+    --bar: #3a4152;
+    --danger: #ff6b6b;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family:
+    "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, -apple-system, sans-serif;
+}
+
+@layer components {
+  .page {
+    @apply mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-8;
+  }
+  .page-title {
+    @apply text-2xl font-bold tracking-tight;
+  }
+  .section-title {
+    @apply text-lg font-semibold;
+  }
+  .muted {
+    color: var(--muted);
+  }
+  .card {
+    @apply rounded-xl border p-5;
+    background: var(--surface);
+    border-color: var(--border);
+  }
+  .stack {
+    @apply flex flex-col gap-4;
+  }
+  .field {
+    @apply flex flex-col gap-1.5 text-sm font-medium;
+  }
+  .field input {
+    @apply rounded-lg border px-3 py-2 text-base font-normal;
+    background: var(--surface);
+    border-color: var(--border);
+  }
+  .field input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .button {
+    @apply inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-semibold transition-opacity disabled:opacity-50;
+    border-color: var(--border);
+    background: var(--surface);
+  }
+  .button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .button.danger {
+    color: var(--danger);
+    border-color: var(--danger);
+  }
+  .error {
+    @apply text-sm font-medium;
+    color: var(--danger);
+  }
+  .link {
+    color: var(--accent);
+    @apply underline-offset-2 hover:underline;
+  }
 }
