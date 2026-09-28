@@ -119,3 +119,164 @@ describe("투표 만들기 검증", () => {
     expect(await voting.createPoll({ ...valid, options: ten }, NOW)).toMatchObject({ ok: true });
   });
 });
+
+const ALICE = "11111111-1111-4111-8111-111111111111";
+const BOB = "22222222-2222-4222-8222-222222222222";
+const CAROL = "33333333-3333-4333-8333-333333333333";
+const member = (voterId: string | null) => ({ voterId, isAdmin: false });
+
+/** 선택지 라벨로 선택지 식별값을 찾을 수 있게 투표를 하나 만든다. */
+async function pollWith(voting: Awaited<ReturnType<typeof setup>>, options: string[]) {
+  const created = await voting.createPoll({ question: "회식 메뉴는?", options, closesAt: TOMORROW }, NOW);
+  if (!created.ok) throw new Error(created.error);
+  const view = await voting.getPoll(created.pollId, member(null), NOW);
+  if (!view.found) throw new Error("투표가 없습니다");
+  const optionId = (label: string) => view.poll.options.find((o) => o.label === label)!.id;
+  return { pollId: created.pollId, optionId };
+}
+
+describe("표 던지기", () => {
+  it("표를 던지기 전에는 결과가 응답에 없다", async () => {
+    const voting = await setup();
+    const { pollId } = await pollWith(voting, ["치킨", "피자"]);
+
+    const view = await voting.getPoll(pollId, member(ALICE), NOW);
+
+    expect(view.found && view.poll.myChoice).toBeNull();
+    expect(view.found && "results" in view.poll).toBe(false);
+  });
+
+  it("표를 던지면 내 선택과 결과를 본다", async () => {
+    const voting = await setup();
+    const { pollId, optionId } = await pollWith(voting, ["치킨", "피자"]);
+
+    expect(await voting.castVote(pollId, optionId("피자"), ALICE, NOW)).toEqual({ ok: true });
+    const view = await voting.getPoll(pollId, member(ALICE), NOW);
+
+    expect(view).toMatchObject({
+      found: true,
+      poll: {
+        myChoice: optionId("피자"),
+        results: {
+          total: 1,
+          options: [
+            { label: "치킨", votes: 0, percent: 0, leading: false },
+            { label: "피자", votes: 1, percent: 100, leading: true },
+          ],
+        },
+      },
+    });
+  });
+});
+
+describe("한 브라우저 한 표", () => {
+  it("같은 동아리원의 두 번째 표는 거절하고 첫 표를 유지한다", async () => {
+    const voting = await setup();
+    const { pollId, optionId } = await pollWith(voting, ["치킨", "피자"]);
+    await voting.castVote(pollId, optionId("치킨"), ALICE, NOW);
+
+    expect(await voting.castVote(pollId, optionId("피자"), ALICE, NOW)).toEqual({
+      ok: false,
+      error: "already_voted",
+    });
+    const view = await voting.getPoll(pollId, member(ALICE), NOW);
+    expect(view).toMatchObject({ poll: { myChoice: optionId("치킨"), results: { total: 1 } } });
+  });
+
+  it("다른 동아리원은 각자 한 표씩 던질 수 있다", async () => {
+    const voting = await setup();
+    const { pollId, optionId } = await pollWith(voting, ["치킨", "피자"]);
+
+    expect(await voting.castVote(pollId, optionId("치킨"), ALICE, NOW)).toEqual({ ok: true });
+    expect(await voting.castVote(pollId, optionId("치킨"), BOB, NOW)).toEqual({ ok: true });
+  });
+
+  it("한 동아리원이 여러 투표에 각각 표를 던질 수 있다", async () => {
+    const voting = await setup();
+    const first = await pollWith(voting, ["치킨", "피자"]);
+    const second = await pollWith(voting, ["가평", "춘천"]);
+
+    expect(await voting.castVote(first.pollId, first.optionId("치킨"), ALICE, NOW)).toEqual({ ok: true });
+    expect(await voting.castVote(second.pollId, second.optionId("춘천"), ALICE, NOW)).toEqual({ ok: true });
+  });
+
+  it("동시에 두 번 눌러도 한 표만 들어간다", async () => {
+    const voting = await setup();
+    const { pollId, optionId } = await pollWith(voting, ["치킨", "피자"]);
+
+    const results = await Promise.all([
+      voting.castVote(pollId, optionId("치킨"), ALICE, NOW),
+      voting.castVote(pollId, optionId("피자"), ALICE, NOW),
+    ]);
+
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    const view = await voting.getPoll(pollId, member(ALICE), NOW);
+    expect(view).toMatchObject({ poll: { results: { total: 1 } } });
+  });
+
+  it("다른 투표의 선택지로는 표를 던질 수 없다", async () => {
+    const voting = await setup();
+    const first = await pollWith(voting, ["치킨", "피자"]);
+    const second = await pollWith(voting, ["가평", "춘천"]);
+
+    expect(await voting.castVote(first.pollId, second.optionId("가평"), ALICE, NOW)).toEqual({
+      ok: false,
+      error: "option_not_in_poll",
+    });
+  });
+
+  it("없는 투표에는 표를 던질 수 없다", async () => {
+    const voting = await setup();
+    const { optionId } = await pollWith(voting, ["치킨", "피자"]);
+
+    expect(
+      await voting.castVote("00000000-0000-4000-8000-000000000000", optionId("치킨"), ALICE, NOW),
+    ).toEqual({ ok: false, error: "poll_not_found" });
+  });
+});
+
+describe("결과", () => {
+  it("동점이면 가장 많이 받은 선택지를 모두 강조한다", async () => {
+    const voting = await setup();
+    const { pollId, optionId } = await pollWith(voting, ["치킨", "피자", "족발"]);
+    await voting.castVote(pollId, optionId("치킨"), ALICE, NOW);
+    await voting.castVote(pollId, optionId("피자"), BOB, NOW);
+
+    const view = await voting.getPoll(pollId, member(ALICE), NOW);
+
+    expect(view).toMatchObject({
+      poll: {
+        results: {
+          total: 2,
+          options: [
+            { label: "치킨", votes: 1, percent: 50, leading: true },
+            { label: "피자", votes: 1, percent: 50, leading: true },
+            { label: "족발", votes: 0, percent: 0, leading: false },
+          ],
+        },
+      },
+    });
+  });
+
+  it("비율은 정수 %로 반올림한다", async () => {
+    const voting = await setup();
+    const { pollId, optionId } = await pollWith(voting, ["치킨", "피자"]);
+    await voting.castVote(pollId, optionId("치킨"), ALICE, NOW);
+    await voting.castVote(pollId, optionId("치킨"), BOB, NOW);
+    await voting.castVote(pollId, optionId("피자"), CAROL, NOW);
+
+    const view = await voting.getPoll(pollId, member(ALICE), NOW);
+
+    expect(view).toMatchObject({
+      poll: {
+        results: {
+          total: 3,
+          options: [
+            { label: "치킨", votes: 2, percent: 67, leading: true },
+            { label: "피자", votes: 1, percent: 33, leading: false },
+          ],
+        },
+      },
+    });
+  });
+});

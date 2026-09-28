@@ -45,7 +45,28 @@ export interface PollView {
   closesAt: Date;
   closed: boolean;
   options: { id: string; label: string }[];
+  /** 이 동아리원이 고른 선택지 식별값. 아직 표를 던지지 않았으면 null. */
+  myChoice: string | null;
+  /** 결과를 볼 수 있을 때만 있다. 볼 수 없으면 키 자체가 없다. */
+  results?: Results;
 }
+
+export interface Results {
+  total: number;
+  options: {
+    optionId: string;
+    label: string;
+    votes: number;
+    /** 정수 %로 반올림한 비율. 합이 정확히 100이 아닐 수 있다. */
+    percent: number;
+    /** 가장 많은 표를 받은 선택지인가. 동점이면 모두, 전체 0표면 아무것도 아니다. */
+    leading: boolean;
+  }[];
+}
+
+export type CastVoteError = "poll_not_found" | "option_not_in_poll" | "already_voted";
+
+export type CastVoteResult = { ok: true } | { ok: false; error: CastVoteError };
 
 export type GetPollResult = { found: true; poll: PollView } | { found: false };
 
@@ -82,8 +103,34 @@ export function createVoting(db: Db, config: VotingConfig) {
       return { ok: true, pollId: row.id };
     },
 
+    async castVote(pollId: string, optionId: string, voterId: string, now: Date): Promise<CastVoteResult> {
+      void now;
+      if (!isUuid(pollId)) return { ok: false, error: "poll_not_found" };
+      if (!isUuid(optionId)) return { ok: false, error: "option_not_in_poll" };
+
+      // (poll_id, voter_id) 유일 제약에 부딪히면 넣지 않는다. 동시에 두 번 눌러도 한 표만 남는다.
+      const inserted = await db.query(
+        `insert into votes (poll_id, option_id, voter_id)
+         select $1, $2, $3
+         where exists (select 1 from options where id = $2 and poll_id = $1)
+         on conflict (poll_id, voter_id) do nothing
+         returning 1`,
+        [pollId, optionId, voterId],
+      );
+      if (inserted.length > 0) return { ok: true };
+
+      // 넣지 못했으면 왜 못 넣었는지 찾는다.
+      const [row] = await db.query<{ has_option: boolean }>(
+        `select exists (select 1 from options where id = $2 and poll_id = $1) as has_option
+         from polls where id = $1`,
+        [pollId, optionId],
+      );
+      if (!row) return { ok: false, error: "poll_not_found" };
+      if (!row.has_option) return { ok: false, error: "option_not_in_poll" };
+      return { ok: false, error: "already_voted" };
+    },
+
     async getPoll(pollId: string, viewer: Viewer, now: Date): Promise<GetPollResult> {
-      void viewer;
       if (!isUuid(pollId)) return { found: false };
       const [poll] = await db.query<{ id: string; question: string; closes_at: Date | string }>(
         `select id, question, closes_at from polls where id = $1`,
@@ -91,26 +138,54 @@ export function createVoting(db: Db, config: VotingConfig) {
       );
       if (!poll) return { found: false };
 
-      const options = await db.query<{ id: string; label: string }>(
-        `select id, label from options where poll_id = $1 order by position`,
+      const options = await db.query<{ id: string; label: string; votes: number }>(
+        `select o.id, o.label, count(v.voter_id)::int as votes
+         from options o left join votes v on v.option_id = o.id
+         where o.poll_id = $1
+         group by o.id
+         order by o.position`,
         [pollId],
       );
+      const myChoice = viewer.voterId && isUuid(viewer.voterId)
+        ? ((
+            await db.query<{ option_id: string }>(
+              `select option_id from votes where poll_id = $1 and voter_id = $2`,
+              [pollId, viewer.voterId],
+            )
+          )[0]?.option_id ?? null)
+        : null;
+
       const closesAt = new Date(poll.closes_at);
-      return {
-        found: true,
-        poll: {
-          id: poll.id,
-          question: poll.question,
-          closesAt,
-          closed: now >= closesAt,
-          options,
-        },
+      const view: PollView = {
+        id: poll.id,
+        question: poll.question,
+        closesAt,
+        closed: now >= closesAt,
+        options: options.map(({ id, label }) => ({ id, label })),
+        myChoice,
       };
+      if (myChoice !== null) view.results = tally(options);
+      return { found: true, poll: view };
     },
   };
 }
 
 export type Voting = ReturnType<typeof createVoting>;
+
+function tally(options: { id: string; label: string; votes: number }[]): Results {
+  const total = options.reduce((sum, option) => sum + option.votes, 0);
+  const top = Math.max(...options.map((option) => option.votes));
+  return {
+    total,
+    options: options.map((option) => ({
+      optionId: option.id,
+      label: option.label,
+      votes: option.votes,
+      percent: total === 0 ? 0 : Math.round((option.votes / total) * 100),
+      leading: total > 0 && option.votes === top,
+    })),
+  };
+}
 
 function validateNewPoll(
   question: string,

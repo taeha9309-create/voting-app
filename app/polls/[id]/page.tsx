@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { formatKst } from "@/lib/kst";
 import { isAdmin } from "@/lib/server/admin-session";
+import { getVoterId } from "@/lib/server/voter";
 import { getVoting } from "@/lib/server/voting";
 import { CopyLink } from "./copy-link";
+import { ResultsChart } from "./results-chart";
+import { VoteForm } from "./vote-form";
 
 export async function generateMetadata(props: PageProps<"/polls/[id]">): Promise<Metadata> {
   const { id } = await props.params;
@@ -15,8 +18,9 @@ export default async function PollPage(props: PageProps<"/polls/[id]">) {
   const { id } = await props.params;
   const { created } = await props.searchParams;
   const admin = await isAdmin();
+  const voterId = await getVoterId();
 
-  const result = await getVoting().getPoll(id, { voterId: null, isAdmin: admin }, new Date());
+  const result = await getVoting().getPoll(id, { voterId, isAdmin: admin }, new Date());
   if (!result.found) notFound();
   const { poll } = result;
 
@@ -34,11 +38,16 @@ export default async function PollPage(props: PageProps<"/polls/[id]">) {
         <p className="muted text-sm">마감: {formatKst(poll.closesAt)}</p>
       </header>
 
-      <ol className="card stack gap-2">
-        {poll.options.map((option) => (
-          <li key={option.id}>{option.label}</li>
-        ))}
-      </ol>
+      {poll.myChoice === null ? (
+        <VoteForm pollId={poll.id} options={poll.options} />
+      ) : (
+        <p className="card">
+          <span className="font-semibold">{poll.options.find((o) => o.id === poll.myChoice)?.label}</span>에 표를
+          던졌습니다. 던진 표는 바꿀 수 없습니다.
+        </p>
+      )}
+
+      {poll.results && <ResultsChart results={poll.results} myChoice={poll.myChoice} />}
     </main>
   );
 }
