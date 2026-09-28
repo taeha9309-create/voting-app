@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { formatKst } from "@/lib/kst";
+import { formatKst, toKstInputValue } from "@/lib/kst";
 import { isAdmin } from "@/lib/server/admin-session";
 import { getVoterId } from "@/lib/server/voter";
 import { getVoting } from "@/lib/server/voting";
+import { AdminPanel } from "./admin-panel";
 import { CopyLink } from "./copy-link";
 import { ResultsChart } from "./results-chart";
 import { VoteForm } from "./vote-form";
@@ -63,6 +64,14 @@ export default async function PollPage(props: PageProps<"/polls/[id]">) {
       )}
 
       {poll.results && <ResultsChart results={poll.results} myChoice={poll.myChoice} />}
+
+      {admin && (
+        <AdminPanel
+          pollId={poll.id}
+          closed={poll.closed}
+          closesAtInput={toKstInputValue(poll.closesAt)}
+        />
+      )}
     </main>
   );
 }

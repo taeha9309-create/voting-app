@@ -400,3 +400,62 @@ describe("투표 목록", () => {
     expect(forBob.open.every((p) => !p.voted)).toBe(true);
   });
 });
+
+describe("마감 시각 바꾸기", () => {
+  const NEXT_WEEK = new Date("2026-10-08T09:00:00+09:00");
+  const IN_ONE_HOUR = new Date(NOW.getTime() + 60 * 60_000);
+
+  it.each([
+    ["늦추기", NEXT_WEEK],
+    ["앞당기기", IN_ONE_HOUR],
+  ])("마감 전에는 %s를 할 수 있다", async (_name, closesAt) => {
+    const voting = await setup();
+    const { pollId } = await pollWith(voting, ["치킨", "피자"]);
+
+    expect(await voting.changeClosesAt(pollId, closesAt, NOW)).toEqual({ ok: true });
+    expect(await voting.getPoll(pollId, member(null), NOW)).toMatchObject({ poll: { closesAt } });
+  });
+
+  it("바꾼 뒤에도 이미 던진 표는 그대로다", async () => {
+    const voting = await setup();
+    const { pollId, optionId } = await pollWith(voting, ["치킨", "피자"]);
+    await voting.castVote(pollId, optionId("피자"), ALICE, NOW);
+
+    await voting.changeClosesAt(pollId, NEXT_WEEK, NOW);
+
+    expect(await voting.getPoll(pollId, member(ALICE), NOW)).toMatchObject({
+      poll: { myChoice: optionId("피자"), results: { total: 1 } },
+    });
+  });
+
+  it("이미 마감된 투표는 바꿀 수 없다", async () => {
+    const voting = await setup();
+    const { pollId } = await pollWith(voting, ["치킨", "피자"]);
+
+    expect(await voting.changeClosesAt(pollId, NEXT_WEEK, TOMORROW)).toEqual({
+      ok: false,
+      error: "poll_closed",
+    });
+    expect(await voting.getPoll(pollId, member(null), TOMORROW)).toMatchObject({ poll: { closesAt: TOMORROW } });
+  });
+
+  it.each([
+    ["지금", NOW, "closes_at_not_future"],
+    ["과거", new Date("2026-09-30T09:00:00+09:00"), "closes_at_not_future"],
+    ["잘못된 값", new Date("invalid"), "closes_at_invalid"],
+  ])("새 마감 시각이 %s이면 바꾸지 않는다", async (_name, closesAt, error) => {
+    const voting = await setup();
+    const { pollId } = await pollWith(voting, ["치킨", "피자"]);
+
+    expect(await voting.changeClosesAt(pollId, closesAt, NOW)).toEqual({ ok: false, error });
+  });
+
+  it("없는 투표는 바꿀 수 없다", async () => {
+    const voting = await setup();
+
+    expect(await voting.changeClosesAt("00000000-0000-4000-8000-000000000000", NEXT_WEEK, NOW)).toEqual({
+      ok: false,
+      error: "poll_not_found",
+    });
+  });
+});

@@ -1,10 +1,11 @@
 "use server";
 
+import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { parseKst } from "@/lib/kst";
 import { requireAdmin } from "@/lib/server/admin-session";
 import { getVoting } from "@/lib/server/voting";
-import { LIMITS, type CreatePollError } from "@/lib/voting/voting";
+import { LIMITS, type ChangeClosesAtError, type CreatePollError } from "@/lib/voting/voting";
 
 export type CreatePollState = { error?: string };
 
@@ -34,4 +35,31 @@ export async function createPoll(_prev: CreatePollState, formData: FormData): Pr
   if (!result.ok) return { error: MESSAGES[result.error] };
 
   redirect(`/polls/${result.pollId}?created=1`);
+}
+
+export type ChangeClosesAtState = { error?: string; done?: boolean };
+
+const CHANGE_MESSAGES: Record<ChangeClosesAtError, string> = {
+  poll_not_found: "투표를 찾을 수 없습니다. 삭제되었을 수 있습니다.",
+  poll_closed: "이미 마감된 투표는 마감 시각을 바꿀 수 없습니다.",
+  closes_at_invalid: MESSAGES.closes_at_invalid,
+  closes_at_not_future: MESSAGES.closes_at_not_future,
+};
+
+export async function changeClosesAt(
+  pollId: string,
+  _prev: ChangeClosesAtState,
+  formData: FormData,
+): Promise<ChangeClosesAtState> {
+  await requireAdmin();
+
+  const result = await getVoting().changeClosesAt(
+    pollId,
+    parseKst(String(formData.get("closesAt") ?? "")),
+    new Date(),
+  );
+  if (!result.ok) return { error: CHANGE_MESSAGES[result.error] };
+
+  refresh();
+  return { done: true };
 }

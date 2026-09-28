@@ -68,6 +68,14 @@ export type CastVoteError = "poll_not_found" | "poll_closed" | "option_not_in_po
 
 export type CastVoteResult = { ok: true } | { ok: false; error: CastVoteError };
 
+export type ChangeClosesAtError =
+  | "poll_not_found"
+  | "poll_closed"
+  | "closes_at_invalid"
+  | "closes_at_not_future";
+
+export type ChangeClosesAtResult = { ok: true } | { ok: false; error: ChangeClosesAtError };
+
 export interface PollSummary {
   id: string;
   question: string;
@@ -145,6 +153,22 @@ export function createVoting(db: Db, config: VotingConfig) {
       if (row.closed) return { ok: false, error: "poll_closed" };
       if (!row.has_option) return { ok: false, error: "option_not_in_poll" };
       return { ok: false, error: "already_voted" };
+    },
+
+    /** 마감 시각은 투표에서 바꿀 수 있는 유일한 값이며, 마감 전에만 바꿀 수 있다. */
+    async changeClosesAt(pollId: string, closesAt: Date, now: Date): Promise<ChangeClosesAtResult> {
+      if (!isUuid(pollId)) return { ok: false, error: "poll_not_found" };
+      const error = validateClosesAt(closesAt, now);
+      if (error) return { ok: false, error };
+
+      const updated = await db.query(
+        `update polls set closes_at = $2 where id = $1 and closes_at > $3 returning 1`,
+        [pollId, closesAt, now],
+      );
+      if (updated.length > 0) return { ok: true };
+
+      const [exists] = await db.query(`select 1 from polls where id = $1`, [pollId]);
+      return { ok: false, error: exists ? "poll_closed" : "poll_not_found" };
     },
 
     async listPolls(viewer: Viewer, now: Date): Promise<PollList> {
@@ -239,6 +263,10 @@ function validateNewPoll(
   if (options.some((option) => !option)) return "option_empty";
   if (options.some((option) => option.length > LIMITS.optionMaxLength)) return "option_too_long";
   if (new Set(options).size !== options.length) return "duplicate_option";
+  return validateClosesAt(closesAt, now);
+}
+
+function validateClosesAt(closesAt: Date, now: Date): "closes_at_invalid" | "closes_at_not_future" | null {
   if (Number.isNaN(closesAt.getTime())) return "closes_at_invalid";
   if (closesAt <= now) return "closes_at_not_future";
   return null;
