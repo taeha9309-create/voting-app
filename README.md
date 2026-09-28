@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 동아리 투표
 
-## Getting Started
+동아리 안에서 쓰는 간단한 투표 앱이다. 운영자가 투표(질문 하나, 선택지, 마감 시각)를 올리면, 동아리원은 로그인 없이 선택지 하나를 골라 표를 던지고 결과를 본다.
 
-First, run the development server:
+- 용어: [CONTEXT.md](CONTEXT.md)
+- 설계 결정: [docs/adr/](docs/adr/)
+- 스펙과 티켓: [.scratch/club-voting/](.scratch/club-voting/)
+
+Next.js 16(App Router), Neon Postgres, Vercel로 만든다.
+
+## 준비
+
+1. 의존성을 설치한다.
+
+   ```bash
+   npm install
+   ```
+
+2. `.env.example`을 `.env.local`로 복사하고 값을 채운다.
+   - `DATABASE_URL`: Neon 연결 주소
+   - `ADMIN_PASSWORD`: 운영자 비밀번호
+   - `SESSION_SECRET`: 32자 이상의 무작위 문자열
+
+3. Neon에 스키마를 적용한다. 처음 한 번만 하면 되고, 다시 해도 안전하다.
+
+   ```bash
+   npm run db:apply-schema
+   ```
+
+## 개발
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run dev        # http://localhost:3000
+npm test           # 테스트 (PGlite를 써서 Neon 없이 돈다)
+npm run typecheck  # 타입 검사
+npm run lint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 배포 (Vercel)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. GitHub 저장소를 Vercel 프로젝트에 연결한다.
+2. Vercel 프로젝트 설정의 환경변수에 `DATABASE_URL`, `ADMIN_PASSWORD`, `SESSION_SECRET`를 넣는다.
+3. 배포에 쓰는 Neon DB에 위의 스키마 적용을 한 번 해 둔다.

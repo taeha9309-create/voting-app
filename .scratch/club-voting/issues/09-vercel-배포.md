@@ -9,4 +9,5 @@
 - [ ] Neon 프로젝트가 있고, README의 방법대로 스키마 SQL을 한 번 적용했다
 - [ ] Vercel 프로젝트에 `DATABASE_URL`, `ADMIN_PASSWORD`, `SESSION_SECRET` 환경변수를 넣었다. `SESSION_SECRET`은 충분히 긴 무작위 값이다
 - [ ] 배포가 성공하고, 배포된 주소에서 운영자 로그인 → 투표 만들기 → 다른 기기로 표 던지기 → 결과 확인 → 마감 시각 바꾸기 → 삭제를 한 번씩 직접 확인했다
-- [ ] 운영자 비밀번호를 운영진에게만 전달했다
+- [ ] 코드를 GitHub 저장소에 Push하고, Vercel 프로젝트를 그 저장소에 연결했다
+- [ ] 제출물(GitHub 저장소 URL, 배포 URL, 운영자 비밀번호)을 정리했다
