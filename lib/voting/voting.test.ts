@@ -359,3 +359,44 @@ describe("결과 공개", () => {
     });
   });
 });
+
+describe("투표 목록", () => {
+  const at = (iso: string) => new Date(`${iso}+09:00`);
+
+  it("투표가 없으면 두 목록 모두 비어 있다", async () => {
+    const voting = await setup();
+
+    expect(await voting.listPolls(member(null), NOW)).toEqual({ open: [], closed: [] });
+  });
+
+  it("진행 중은 마감이 이른 순서, 마감은 마감이 늦은 순서로 나눈다", async () => {
+    const voting = await setup();
+    const create = (question: string, closesAt: Date) =>
+      voting.createPoll({ question, options: ["예", "아니오"], closesAt }, at("2026-09-01T00:00:00"));
+    await create("모레 마감", at("2026-10-03T18:00:00"));
+    await create("어제 마감", at("2026-09-30T18:00:00"));
+    await create("내일 마감", at("2026-10-02T18:00:00"));
+    await create("지난주 마감", at("2026-09-24T18:00:00"));
+
+    const list = await voting.listPolls(member(null), NOW);
+
+    expect(list.open.map((p) => p.question)).toEqual(["내일 마감", "모레 마감"]);
+    expect(list.closed.map((p) => p.question)).toEqual(["어제 마감", "지난주 마감"]);
+    expect(list.open[0]).toMatchObject({ closesAt: at("2026-10-02T18:00:00") });
+  });
+
+  it("이 동아리원이 표를 던진 투표를 표시한다", async () => {
+    const voting = await setup();
+    const voted = await pollWith(voting, ["치킨", "피자"]);
+    await pollWith(voting, ["가평", "춘천"]);
+    await voting.castVote(voted.pollId, voted.optionId("치킨"), ALICE, NOW);
+
+    const forAlice = await voting.listPolls(member(ALICE), NOW);
+    const forBob = await voting.listPolls(member(BOB), NOW);
+
+    expect(forAlice.open.map((p) => [p.id === voted.pollId, p.voted])).toEqual(
+      expect.arrayContaining([[true, true], [false, false]]),
+    );
+    expect(forBob.open.every((p) => !p.voted)).toBe(true);
+  });
+});

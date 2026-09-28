@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { isAdmin } from "@/lib/server/admin-session";
+import { AUTHOR_NAME } from "@/lib/site";
 import { logout } from "./admin/actions";
 import "./globals.css";
 
@@ -36,7 +37,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         </header>
         {children}
         <footer className="mx-auto flex w-full max-w-2xl items-center justify-between px-4 py-6 text-sm muted">
-          <span />
+          <span>만든 사람: {AUTHOR_NAME}</span>
           {!admin && (
             <Link href="/admin/login" className="muted hover:underline">
               운영자

@@ -68,6 +68,21 @@ export type CastVoteError = "poll_not_found" | "poll_closed" | "option_not_in_po
 
 export type CastVoteResult = { ok: true } | { ok: false; error: CastVoteError };
 
+export interface PollSummary {
+  id: string;
+  question: string;
+  closesAt: Date;
+  /** 이 동아리원이 이 투표에 표를 던졌는가. */
+  voted: boolean;
+}
+
+export interface PollList {
+  /** 진행 중인 투표. 마감 시각이 이른 순서. */
+  open: PollSummary[];
+  /** 마감된 투표. 마감 시각이 늦은(최근에 마감된) 순서. */
+  closed: PollSummary[];
+}
+
 export type GetPollResult = { found: true; poll: PollView } | { found: false };
 
 /**
@@ -130,6 +145,27 @@ export function createVoting(db: Db, config: VotingConfig) {
       if (row.closed) return { ok: false, error: "poll_closed" };
       if (!row.has_option) return { ok: false, error: "option_not_in_poll" };
       return { ok: false, error: "already_voted" };
+    },
+
+    async listPolls(viewer: Viewer, now: Date): Promise<PollList> {
+      const voterId = viewer.voterId && isUuid(viewer.voterId) ? viewer.voterId : null;
+      const rows = await db.query<{ id: string; question: string; closes_at: Date | string; voted: boolean }>(
+        `select p.id, p.question, p.closes_at,
+                exists (select 1 from votes v where v.poll_id = p.id and v.voter_id = $1) as voted
+         from polls p
+         order by p.closes_at`,
+        [voterId],
+      );
+      const polls = rows.map((row) => ({
+        id: row.id,
+        question: row.question,
+        closesAt: new Date(row.closes_at),
+        voted: row.voted,
+      }));
+      return {
+        open: polls.filter((poll) => poll.closesAt > now),
+        closed: polls.filter((poll) => poll.closesAt <= now).reverse(),
+      };
     },
 
     async getPoll(pollId: string, viewer: Viewer, now: Date): Promise<GetPollResult> {
