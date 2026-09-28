@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { changeClosesAt } from "@/app/admin/polls/actions";
+import { changeClosesAt, deletePoll } from "@/app/admin/polls/actions";
 
 interface Props {
   pollId: string;
@@ -22,6 +22,7 @@ export function AdminPanel({ pollId, closed, closesAtInput }: Props) {
       ) : (
         <ChangeClosesAtForm pollId={pollId} closesAtInput={closesAtInput} />
       )}
+      <DeleteButton pollId={pollId} />
     </section>
   );
 }
@@ -58,6 +59,29 @@ function ChangeClosesAtForm({ pollId, closesAtInput }: { pollId: string; closesA
           마감 시각을 바꿨습니다.
         </p>
       )}
+    </form>
+  );
+}
+
+function DeleteButton({ pollId }: { pollId: string }) {
+  const [pending, setPending] = useState(false);
+
+  return (
+    <form
+      action={deletePoll.bind(null, pollId)}
+      onSubmit={(e) => {
+        if (!confirm("이 투표를 삭제할까요? 선택지와 표까지 영구 삭제되며 되돌릴 수 없습니다.")) {
+          e.preventDefault();
+          return;
+        }
+        setPending(true);
+      }}
+      className="border-t pt-4"
+      style={{ borderColor: "var(--border)" }}
+    >
+      <button type="submit" className="button danger" disabled={pending}>
+        {pending ? "삭제하는 중…" : "투표 삭제"}
+      </button>
     </form>
   );
 }

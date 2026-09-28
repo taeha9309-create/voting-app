@@ -76,6 +76,8 @@ export type ChangeClosesAtError =
 
 export type ChangeClosesAtResult = { ok: true } | { ok: false; error: ChangeClosesAtError };
 
+export type DeletePollResult = { ok: true } | { ok: false; error: "poll_not_found" };
+
 export interface PollSummary {
   id: string;
   question: string;
@@ -169,6 +171,13 @@ export function createVoting(db: Db, config: VotingConfig) {
 
       const [exists] = await db.query(`select 1 from polls where id = $1`, [pollId]);
       return { ok: false, error: exists ? "poll_closed" : "poll_not_found" };
+    },
+
+    /** 영구 삭제. 선택지와 표는 DB의 연쇄 삭제로 함께 지워진다. */
+    async deletePoll(pollId: string): Promise<DeletePollResult> {
+      if (!isUuid(pollId)) return { ok: false, error: "poll_not_found" };
+      const deleted = await db.query(`delete from polls where id = $1 returning 1`, [pollId]);
+      return deleted.length > 0 ? { ok: true } : { ok: false, error: "poll_not_found" };
     },
 
     async listPolls(viewer: Viewer, now: Date): Promise<PollList> {

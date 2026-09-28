@@ -459,3 +459,43 @@ describe("마감 시각 바꾸기", () => {
     });
   });
 });
+
+describe("투표 삭제하기", () => {
+  it("삭제한 투표는 볼 수도, 표를 던질 수도, 목록에 나오지도 않는다", async () => {
+    const voting = await setup();
+    const { pollId, optionId } = await pollWith(voting, ["치킨", "피자"]);
+    await voting.castVote(pollId, optionId("치킨"), ALICE, NOW);
+
+    expect(await voting.deletePoll(pollId)).toEqual({ ok: true });
+
+    expect(await voting.getPoll(pollId, member(ALICE), NOW)).toEqual({ found: false });
+    expect(await voting.castVote(pollId, optionId("피자"), BOB, NOW)).toEqual({
+      ok: false,
+      error: "poll_not_found",
+    });
+    expect(await voting.listPolls(member(ALICE), NOW)).toEqual({ open: [], closed: [] });
+  });
+
+  it("다른 투표와 그 표는 남는다", async () => {
+    const voting = await setup();
+    const doomed = await pollWith(voting, ["치킨", "피자"]);
+    const kept = await pollWith(voting, ["가평", "춘천"]);
+    await voting.castVote(kept.pollId, kept.optionId("가평"), ALICE, NOW);
+
+    await voting.deletePoll(doomed.pollId);
+
+    expect(await voting.getPoll(kept.pollId, member(ALICE), NOW)).toMatchObject({
+      poll: { results: { total: 1 } },
+    });
+  });
+
+  it("없는 투표는 삭제할 수 없다", async () => {
+    const voting = await setup();
+
+    expect(await voting.deletePoll("00000000-0000-4000-8000-000000000000")).toEqual({
+      ok: false,
+      error: "poll_not_found",
+    });
+    expect(await voting.deletePoll("not-a-poll")).toEqual({ ok: false, error: "poll_not_found" });
+  });
+});

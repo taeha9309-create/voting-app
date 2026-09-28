@@ -63,3 +63,10 @@ export async function changeClosesAt(
   refresh();
   return { done: true };
 }
+
+/** 확인 창은 화면에서 띄운다. 이미 지워진 투표여도 목록으로 돌아가면 된다. */
+export async function deletePoll(pollId: string): Promise<void> {
+  await requireAdmin();
+  await getVoting().deletePoll(pollId);
+  redirect("/");
+}
