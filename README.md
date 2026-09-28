@@ -29,6 +29,8 @@ Next.js 16(App Router), Neon Postgres, Vercel로 만든다.
 
 ## 개발
 
+`DATABASE_URL`을 비워 두면 개발 모드에서는 Neon 대신 `.pglite/` 폴더의 로컬 Postgres(PGlite)를 쓴다. Neon 계정 없이 화면을 확인할 수 있다. 로컬 데이터를 지우려면 `.pglite/` 폴더를 지운다.
+
 ```bash
 npm run dev        # http://localhost:3000
 npm test           # 테스트 (PGlite를 써서 Neon 없이 돈다)
