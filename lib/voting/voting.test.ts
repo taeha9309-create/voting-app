@@ -280,3 +280,82 @@ describe("결과", () => {
     });
   });
 });
+
+describe("자동 마감", () => {
+  const ONE_MINUTE_BEFORE = new Date(TOMORROW.getTime() - 60_000);
+
+  it("마감 시각 1분 전에는 표를 받는다", async () => {
+    const voting = await setup();
+    const { pollId, optionId } = await pollWith(voting, ["치킨", "피자"]);
+
+    expect(await voting.castVote(pollId, optionId("치킨"), ALICE, ONE_MINUTE_BEFORE)).toEqual({ ok: true });
+  });
+
+  it("마감 시각 정각부터는 표를 받지 않는다", async () => {
+    const voting = await setup();
+    const { pollId, optionId } = await pollWith(voting, ["치킨", "피자"]);
+
+    expect(await voting.castVote(pollId, optionId("치킨"), ALICE, TOMORROW)).toEqual({
+      ok: false,
+      error: "poll_closed",
+    });
+  });
+
+  it("마감 시각이 지나면 투표가 마감된 것으로 보인다", async () => {
+    const voting = await setup();
+    const { pollId } = await pollWith(voting, ["치킨", "피자"]);
+
+    expect(await voting.getPoll(pollId, member(ALICE), ONE_MINUTE_BEFORE)).toMatchObject({ poll: { closed: false } });
+    expect(await voting.getPoll(pollId, member(ALICE), TOMORROW)).toMatchObject({ poll: { closed: true } });
+  });
+});
+
+describe("결과 공개", () => {
+  const AFTER_CLOSE = new Date(TOMORROW.getTime() + 60_000);
+
+  /** 앨리스만 표를 던진 투표. */
+  async function pollAliceVoted() {
+    const voting = await setup();
+    const { pollId, optionId } = await pollWith(voting, ["치킨", "피자"]);
+    await voting.castVote(pollId, optionId("치킨"), ALICE, NOW);
+    const seesResults = async (viewer: { voterId: string | null; isAdmin: boolean }, now: Date) => {
+      const view = await voting.getPoll(pollId, viewer, now);
+      return view.found && "results" in view.poll;
+    };
+    return seesResults;
+  }
+
+  it.each([
+    { name: "운영자", viewer: { voterId: null, isAdmin: true }, now: NOW, visible: true },
+    { name: "표를 던진 동아리원", viewer: member(ALICE), now: NOW, visible: true },
+    { name: "표를 던지지 않은 동아리원", viewer: member(BOB), now: NOW, visible: false },
+    { name: "식별값이 없는 동아리원", viewer: member(null), now: NOW, visible: false },
+    { name: "마감 뒤 운영자", viewer: { voterId: null, isAdmin: true }, now: AFTER_CLOSE, visible: true },
+    { name: "마감 뒤 표를 던진 동아리원", viewer: member(ALICE), now: AFTER_CLOSE, visible: true },
+    { name: "마감 뒤 표를 던지지 않은 동아리원", viewer: member(BOB), now: AFTER_CLOSE, visible: true },
+    { name: "마감 뒤 식별값이 없는 동아리원", viewer: member(null), now: AFTER_CLOSE, visible: true },
+  ])("$name: 결과를 볼 수 있는가 → $visible", async ({ viewer, now, visible }) => {
+    const seesResults = await pollAliceVoted();
+
+    expect(await seesResults(viewer, now)).toBe(visible);
+  });
+
+  it("전체 0표로 마감된 투표는 모두 0표 0%이고 아무것도 강조하지 않는다", async () => {
+    const voting = await setup();
+    const { pollId } = await pollWith(voting, ["치킨", "피자"]);
+
+    const view = await voting.getPoll(pollId, member(null), AFTER_CLOSE);
+
+    expect(view).toMatchObject({
+      poll: {
+        results: {
+          total: 0,
+          options: [
+            { label: "치킨", votes: 0, percent: 0, leading: false },
+            { label: "피자", votes: 0, percent: 0, leading: false },
+          ],
+        },
+      },
+    });
+  });
+});

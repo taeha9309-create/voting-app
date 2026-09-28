@@ -84,6 +84,15 @@ body {
     @apply text-sm font-medium;
     color: var(--danger);
   }
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+    background: var(--border);
+    color: var(--muted);
+  }
+  .badge.open {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
   .link {
     color: var(--accent);
     @apply underline-offset-2 hover:underline;

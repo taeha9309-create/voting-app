@@ -64,7 +64,7 @@ export interface Results {
   }[];
 }
 
-export type CastVoteError = "poll_not_found" | "option_not_in_poll" | "already_voted";
+export type CastVoteError = "poll_not_found" | "poll_closed" | "option_not_in_poll" | "already_voted";
 
 export type CastVoteResult = { ok: true } | { ok: false; error: CastVoteError };
 
@@ -104,7 +104,6 @@ export function createVoting(db: Db, config: VotingConfig) {
     },
 
     async castVote(pollId: string, optionId: string, voterId: string, now: Date): Promise<CastVoteResult> {
-      void now;
       if (!isUuid(pollId)) return { ok: false, error: "poll_not_found" };
       if (!isUuid(optionId)) return { ok: false, error: "option_not_in_poll" };
 
@@ -113,19 +112,22 @@ export function createVoting(db: Db, config: VotingConfig) {
         `insert into votes (poll_id, option_id, voter_id)
          select $1, $2, $3
          where exists (select 1 from options where id = $2 and poll_id = $1)
+           and exists (select 1 from polls where id = $1 and closes_at > $4)
          on conflict (poll_id, voter_id) do nothing
          returning 1`,
-        [pollId, optionId, voterId],
+        [pollId, optionId, voterId, now],
       );
       if (inserted.length > 0) return { ok: true };
 
       // 넣지 못했으면 왜 못 넣었는지 찾는다.
-      const [row] = await db.query<{ has_option: boolean }>(
-        `select exists (select 1 from options where id = $2 and poll_id = $1) as has_option
+      const [row] = await db.query<{ has_option: boolean; closed: boolean }>(
+        `select exists (select 1 from options where id = $2 and poll_id = $1) as has_option,
+                closes_at <= $3 as closed
          from polls where id = $1`,
-        [pollId, optionId],
+        [pollId, optionId, now],
       );
       if (!row) return { ok: false, error: "poll_not_found" };
+      if (row.closed) return { ok: false, error: "poll_closed" };
       if (!row.has_option) return { ok: false, error: "option_not_in_poll" };
       return { ok: false, error: "already_voted" };
     },
@@ -164,7 +166,8 @@ export function createVoting(db: Db, config: VotingConfig) {
         options: options.map(({ id, label }) => ({ id, label })),
         myChoice,
       };
-      if (myChoice !== null) view.results = tally(options);
+      // 결과 공개 규칙: 운영자이거나, 이 동아리원이 표를 던졌거나, 마감되었을 때만.
+      if (viewer.isAdmin || myChoice !== null || view.closed) view.results = tally(options);
       return { found: true, poll: view };
     },
   };
