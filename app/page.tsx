@@ -65,9 +65,9 @@ function PollSection({
                   </span>
                 </div>
                 {poll.voted ? (
-                  <span className="badge open shrink-0">투표함</span>
+                  <span className="badge open shrink-0">표 던짐</span>
                 ) : (
-                  !closed && <span className="badge shrink-0">아직 안 함</span>
+                  !closed && <span className="badge shrink-0">아직 안 던짐</span>
                 )}
               </Link>
             </li>

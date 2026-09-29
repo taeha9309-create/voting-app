@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { Db } from "@/lib/db/types";
+import { isUuid } from "@/lib/uuid";
 
 export interface VotingConfig {
   /** 운영진이 같이 쓰는 운영자 비밀번호. 비어 있으면 아무도 로그인할 수 없다. */
@@ -279,13 +280,6 @@ function validateClosesAt(closesAt: Date, now: Date): "closes_at_invalid" | "clo
   if (Number.isNaN(closesAt.getTime())) return "closes_at_invalid";
   if (closesAt <= now) return "closes_at_not_future";
   return null;
-}
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** 링크에서 온 식별값이 UUID가 아니면 DB에 묻지 않는다(Postgres가 형 변환 오류를 낸다). */
-function isUuid(value: string): boolean {
-  return UUID.test(value);
 }
 
 function sha256(value: string): Buffer {
